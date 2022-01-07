@@ -1,67 +1,84 @@
 package com.ciandt.pocwebflux.service;
 
-import br.com.bradesco.cinv.comum.consulta.pacl.Consolidado;
 import br.com.bradesco.investimento.comum.DadosObjetoTopicoKafka;
 import com.ciandt.pocwebflux.util.Constants;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
 
+@Service
 public class WebFluxService {
 
-    protected WebClient getWebClient() {return WebClient.create();}
+    protected WebClient getWebClient() {
+        return WebClient.create();
+    }
 
+    RestTemplate restTemplate;
+
+    public RestTemplate getRestTemplate() {
+
+        if (Objects.isNull(this.restTemplate)) {
+            this.restTemplate = new RestTemplate();
+        }
+
+        return this.restTemplate;
+    }
 
     public DadosObjetoTopicoKafka<String> casoSemWebFlux() {
-        String message = LocalDateTime.now() +
-                bateRotaInstantanea().getMensagem() +
-                LocalDateTime.now() +
-                bateRotaAssincrona().getMensagem() +
-                LocalDateTime.now() +
-                bateRotaInstantanea().getMensagem() +
-                LocalDateTime.now() +
-                bateRotaAssincrona().getMensagem() +
-                LocalDateTime.now() +
-                bateRotaInstantanea().getMensagem() +
-                LocalDateTime.now();
+
+        final StringBuilder stringBuilder = new StringBuilder();
+
+        for (int i = 0; i < 10; i++) {
+            stringBuilder.append(bateRotaAssincrona().getMensagem() + LocalDateTime.now());
+        }
         DadosObjetoTopicoKafka<String> res = new DadosObjetoTopicoKafka<>();
-        res.setMensagem(message);
+        res.setMensagem(stringBuilder.toString());
         return res;
     }
 
-    public DadosObjetoTopicoKafka<String> casoComWebFluxSucesso() {
+    public List<String> casoComWebFluxSucesso() {
+        final Mono<List<String>> listMono = Flux.range(0, 10).flatMap(e -> {
+                    return getWebClient()
+                            .get()
+                            .uri(Constants.URL_BASE + Constants.RES_ASSINC)
+                            .retrieve()
+                            .bodyToMono(String.class);
+                })
+                .map(e -> e + " " + LocalDateTime.now())
+                .collectList();
 
-        Mono<DadosObjetoTopicoKafka<String>> response = getWebClient()
-                .get()
-                .uri(Constants.URL_BASE + Constants.RES_ASSINC)
-                .retrieve()
-                .onStatus(HttpStatus::is5xxServerError, res -> Mono.error(new RuntimeException("Erro ao processar request")))
-                .bodyToMono(new ParameterizedTypeReference<DadosObjetoTopicoKafka<String>>(){}).
-
-        return response.onErrorReturn(RuntimeException.class, new DadosObjetoTopicoKafka<>()).block();
-    }
-
-    public DadosObjetoTopicoKafka<String> casoSemWebFluxErro() {
-
-    }
-
-    public DadosObjetoTopicoKafka<String> casoComWebFluxErro() {
+        return listMono.onErrorReturn(RuntimeException.class, Collections.singletonList("")).block();
 
     }
 
     private DadosObjetoTopicoKafka<String> bateRotaInstantanea() {
-        return new DadosObjetoTopicoKafka<String>();
+
+        final String forObject = this.getRestTemplate().getForObject(Constants.URL_BASE + Constants.RES_INST, String.class);
+        final DadosObjetoTopicoKafka<String> stringDadosObjetoTopicoKafka = new DadosObjetoTopicoKafka<>();
+        stringDadosObjetoTopicoKafka.setMensagem(forObject);
+        return stringDadosObjetoTopicoKafka;
     }
 
     private DadosObjetoTopicoKafka<String> bateRotaAssincrona() {
-        return new DadosObjetoTopicoKafka<String>();
+
+        final String forObject = this.getRestTemplate().getForObject(Constants.URL_BASE + Constants.RES_ASSINC, String.class);
+        final DadosObjetoTopicoKafka<String> stringDadosObjetoTopicoKafka = new DadosObjetoTopicoKafka<>();
+        stringDadosObjetoTopicoKafka.setMensagem(forObject);
+        return stringDadosObjetoTopicoKafka;
     }
 
     private DadosObjetoTopicoKafka<String> bateRotaErro() {
-        return new DadosObjetoTopicoKafka<String>();
+        final String forObject = this.getRestTemplate().getForObject(Constants.URL_BASE + Constants.RES_ERR, String.class);
+        final DadosObjetoTopicoKafka<String> stringDadosObjetoTopicoKafka = new DadosObjetoTopicoKafka<>();
+        stringDadosObjetoTopicoKafka.setMensagem(forObject);
+        return stringDadosObjetoTopicoKafka;
     }
 
 
